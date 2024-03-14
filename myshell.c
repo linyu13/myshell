@@ -1,12 +1,12 @@
 #include <pwd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define BOLD "\033[1m"      // 加粗
-
+#define BOLD "\033[1m" // 加粗
 
 // 文本颜色
 #define BLACK "\033[30m"   // 黑色
@@ -18,14 +18,42 @@
 #define CYAN "\033[36m"    // 青色
 #define WHITE "\033[37m"   // 白色
 
-
 #define LENGTH 2048
 
 char last_dir[1000] = "";
-int flag = 0;
+
+void signal_handler(int signum) {
+    printf("\n");
+    fflush(stdout);
+    // 获取当前用户名
+    struct passwd *pwd = getpwuid(getuid());
+    char *buf = (char *)calloc(LENGTH, sizeof(char)); // 分配内存并清零
+    if (buf == NULL) {
+        perror("calloc");
+        exit(EXIT_FAILURE);
+    }
+    if (getcwd(buf, LENGTH) == NULL) {
+        perror("getcwd");
+        free(buf);
+        exit(EXIT_FAILURE);
+    }
+    printf("\n" BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
+           "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
+           pwd->pw_name, buf);
+
+    fflush(stdout); // 打印提示符并刷新输出缓冲区
+}
+
 int main() {
 
+    signal(SIGINT, signal_handler);
+    signal(SIGQUIT, signal_handler);
+    signal(SIGTSTP, signal_handler);
     while (1) {
+        if (feof(stdin)) {
+            printf("\n");
+            break;
+        }
         // 获取当前用户名
         struct passwd *pwd = getpwuid(getuid());
         char *buf = (char *)calloc(LENGTH, sizeof(char)); // 分配内存并清零
@@ -78,6 +106,9 @@ int main() {
         }
         // 将下一指针设置为空
         str[i] = NULL;
+        if (strcmp("exit", str[0]) == 0) {
+            break;
+        }
         // 当出现cd的时候,这里是字符串的比较,strcmp函数,相同则为0
         if (strcmp("cd", str[0]) == 0) {
             if (str[1] == NULL || str[1] == 0) {
@@ -99,9 +130,6 @@ int main() {
                 // if (getcwd(cwd, sizeof(cwd)) != NULL) {
                 //     printf("当前工作目录：%s\n", cwd);
                 // }
-                if (buf != str[1]) {
-                    flag = 1;
-                }
                 if (chdir(str[1]) == -1) {
                     perror("chdir");
                 }
@@ -115,15 +143,14 @@ int main() {
         if (pid < 0) {
             perror("error");
             return -1;
-        }
-        // 创建成功
-        else if (0 == pid) {
+        } else if (0 == pid) {
             // 使用cxecvp进行替换，转到需要执行的程序中
             execvp(str[0], str);
             perror("error");
             exit(-1);
+        } else if (strcmp(str[i - 1], "&") != 0) {
+            wait(NULL);
         }
-        wait(NULL);
     }
     return 0;
 }
