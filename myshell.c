@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -21,13 +22,15 @@
 #define LENGTH 2048
 
 char last_dir[1000] = "";
-
-void signal_handler(int signum) {
+int flag_linyu = 0;
+void signal_handler(int signum)
+{
     printf("\n");
     fflush(stdout);
     // 获取当前用户名
-    struct passwd *pwd = getpwuid(getuid());
-    char *buf = (char *)calloc(LENGTH, sizeof(char)); // 分配内存并清零
+    flag_linyu = 1;
+    struct passwd* pwd = getpwuid(getuid());
+    char* buf = (char*)calloc(LENGTH, sizeof(char)); // 分配内存并清零
     if (buf == NULL) {
         perror("calloc");
         exit(EXIT_FAILURE);
@@ -37,15 +40,17 @@ void signal_handler(int signum) {
         free(buf);
         exit(EXIT_FAILURE);
     }
-    printf("\n" BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
-           "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
-           pwd->pw_name, buf);
+    printf(
+        "\n" BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
+        "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
+        pwd->pw_name,
+        buf);
 
     fflush(stdout); // 打印提示符并刷新输出缓冲区
 }
 
-int main() {
-
+int main()
+{
     signal(SIGINT, signal_handler);
     signal(SIGQUIT, signal_handler);
     signal(SIGTSTP, signal_handler);
@@ -55,26 +60,28 @@ int main() {
             break;
         }
         // 获取当前用户名
-        struct passwd *pwd = getpwuid(getuid());
-        char *buf = (char *)calloc(LENGTH, sizeof(char)); // 分配内存并清零
-        if (buf == NULL) {
-            perror("calloc");
-            exit(EXIT_FAILURE);
-        }
-        if (getcwd(buf, LENGTH) == NULL) {
-            perror("getcwd");
-            free(buf);
-            exit(EXIT_FAILURE);
-        }
-        printf(BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
-                         "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD
-                         "$ \033[0m",
-               pwd->pw_name, buf);
+        struct passwd* pwd = getpwuid(getuid());
+        char* buf = (char*)calloc(LENGTH, sizeof(char)); // 分配内存并清零
+        if (!flag_linyu) {
+            if (buf == NULL) {
+                perror("calloc");
+                exit(EXIT_FAILURE);
+            }
+            if (getcwd(buf, LENGTH) == NULL) {
+                perror("getcwd");
+                free(buf);
+                exit(EXIT_FAILURE);
+            }
+            printf(
+                BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
+                          "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
+                pwd->pw_name,
+                buf);
 
-        fflush(stdout); // 打印提示符并刷新输出缓冲区
-
+            fflush(stdout); // 打印提示符并刷新输出缓冲区
+        }
         // 定义字符串存储输入的信息
-        char arr[100] = {0};
+        char arr[100] = { 0 };
         // 将信息输入到arr中
         fgets(arr, 99, stdin);
         // 将最后一个字符改为\0（将回车改为\0表示字符串结束）
@@ -82,15 +89,15 @@ int main() {
 
         // 处理字符串//
         int i = 0;
-        char *argv = arr;
-        char *str[100] = {NULL};
+        char* argv = arr;
+        char* str[100] = { NULL };
         if (strlen(arr) == 0 || 0 == strcmp("\n", arr)) {
             continue;
         }
 
-        while (*argv != '\0') // 字符串没有结束之前一直循环
+        while (*argv != '\0')  // 字符串没有结束之前一直循环
         {
-            if (*argv != ' ') // 字符不是空格时
+            if (*argv != ' ')  // 字符不是空格时
             {
                 str[i] = argv; // 将字符写入str中
                 i++;
@@ -114,18 +121,22 @@ int main() {
             if (str[1] == NULL || str[1] == 0) {
                 chdir(getenv("HOME"));
                 strcpy(last_dir, buf);
-            } else if (strcmp(str[1], "-") == 0) {
+            }
+            else if (strcmp(str[1], "-") == 0) {
                 if (strlen(last_dir) == 0) {
                     printf("%s\n", buf);
-                } else {
+                }
+                else {
                     if (chdir(last_dir) == -1) {
                         perror("chdir");
-                    } else {
+                    }
+                    else {
                         printf("%s\n", last_dir);
                     }
                     strcpy(last_dir, buf);
                 }
-            } else {
+            }
+            else {
                 // char cwd[1024];
                 // if (getcwd(cwd, sizeof(cwd)) != NULL) {
                 //     printf("当前工作目录：%s\n", cwd);
@@ -143,12 +154,14 @@ int main() {
         if (pid < 0) {
             perror("error");
             return -1;
-        } else if (0 == pid) {
+        }
+        else if (0 == pid) {
             // 使用cxecvp进行替换，转到需要执行的程序中
             execvp(str[0], str);
             perror("error");
             exit(-1);
-        } else if (strcmp(str[i - 1], "&") != 0) {
+        }
+        else if (strcmp(str[i - 1], "&") != 0) {
             wait(NULL);
         }
     }
