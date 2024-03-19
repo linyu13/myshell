@@ -1,10 +1,13 @@
 #include <fcntl.h>
 #include <pwd.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define BOLD "\033[1m" // 加粗
@@ -21,149 +24,232 @@
 
 #define LENGTH 2048
 
-char last_dir[1000] = "";
-int flag_linyu = 0;
+char last_dir[LENGTH] = "";
+char* generate_prompt();
+
 void signal_handler(int signum)
 {
     printf("\n");
     fflush(stdout);
-    // 获取当前用户名
-    flag_linyu = 1;
-    struct passwd* pwd = getpwuid(getuid());
-    char* buf = (char*)calloc(LENGTH, sizeof(char)); // 分配内存并清零
-    if (buf == NULL) {
-        perror("calloc");
-        exit(EXIT_FAILURE);
-    }
-    if (getcwd(buf, LENGTH) == NULL) {
-        perror("getcwd");
-        free(buf);
-        exit(EXIT_FAILURE);
-    }
-    printf(
-        "\n" BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
-        "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
-        pwd->pw_name,
-        buf);
+}
 
-    fflush(stdout); // 打印提示符并刷新输出缓冲区
+char* generate_prompt()
+{
+    // 获取当前时间
+    time_t current_time;
+    struct tm* timeinfo;
+    char time_string[12]; // HH:MM:SS 格式
+    time(&current_time);
+    timeinfo = localtime(&current_time);
+    strftime(time_string, sizeof(time_string), "[%H:%M:%S]", timeinfo);
+
+    // 获取当前用户名和目录
+    struct passwd* pwd = getpwuid(getuid());
+    char* username = pwd->pw_name;
+    char cwd[LENGTH];
+    if (getcwd(cwd, LENGTH) == NULL) {
+        perror("getcwd");
+        exit(EXIT_FAILURE);
+    }
+
+    // 将 "/home/linyu" 替换为 "~"
+    char* home_dir = getenv("HOME");
+    if (home_dir != NULL && strstr(cwd, home_dir) == cwd) {
+        char* relative_path = cwd + strlen(home_dir);
+        char* temp_prompt = (char*)malloc(LENGTH * sizeof(char));
+        if (temp_prompt == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        sprintf(
+            temp_prompt,
+            BLUE BOLD "# %s\033[0m" CYAN " @ " GREEN "%s\033[0m" CYAN " in\033[0m " YELLOW
+                      "~%s\033[0m" CYAN " %s\033[0m\n" RED BOLD "$\033[0m " WHITE,
+            username,
+            username,
+            relative_path,
+            time_string);
+        return temp_prompt;
+    }
+
+    // 构造提示符
+    char* prompt = (char*)malloc(LENGTH * sizeof(char));
+    if (prompt == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    sprintf(
+        prompt,
+        BLUE BOLD
+        "# %s\033[0m"
+        " " CYAN
+        "@\033[0m"
+        " " GREEN
+        "%s\033[0m"
+        " " CYAN
+        "in\033[0m"
+        " " YELLOW
+        "%s\033[0m"
+        " " CYAN "%s\033[0m\n" RED BOLD
+        "$\033[0m"
+        " " WHITE,
+        username,
+        username,
+        cwd,
+        time_string);
+
+    return prompt;
 }
 
 int main()
 {
     signal(SIGINT, signal_handler);
     signal(SIGQUIT, signal_handler);
-    signal(SIGTSTP, signal_handler);
+    // signal(SIGTSTP, signal_handler);
     while (1) {
         if (feof(stdin)) {
             printf("\n");
             break;
         }
-        // 获取当前用户名
         struct passwd* pwd = getpwuid(getuid());
-        char* buf = (char*)calloc(LENGTH, sizeof(char)); // 分配内存并清零
-        if (!flag_linyu) {
-            if (buf == NULL) {
-                perror("calloc");
-                exit(EXIT_FAILURE);
-            }
-            if (getcwd(buf, LENGTH) == NULL) {
-                perror("getcwd");
-                free(buf);
-                exit(EXIT_FAILURE);
-            }
-            printf(
-                BLUE BOLD "#\033[0m " BLUE "%s\033[0m " WHITE "@\033[0m " GREEN
-                          "linyu\033[0m in " YELLOW "%s\033[0m\n" RED BOLD "$ \033[0m",
-                pwd->pw_name,
-                buf);
-
-            fflush(stdout); // 打印提示符并刷新输出缓冲区
+        char* username = pwd->pw_name;
+        char cwd[LENGTH];
+        if (getcwd(cwd, LENGTH) == NULL) {
+            perror("getcwd");
+            exit(EXIT_FAILURE);
         }
-        // 定义字符串存储输入的信息
-        char arr[100] = { 0 };
-        // 将信息输入到arr中
-        fgets(arr, 99, stdin);
-        // 将最后一个字符改为\0（将回车改为\0表示字符串结束）
-        arr[strlen(arr) - 1] = '\0';
+        printf("\n");
+        fflush(stdout);
+        char* prompt = generate_prompt();
 
-        // 处理字符串//
-        int i = 0;
-        char* argv = arr;
-        char* str[100] = { NULL };
-        if (strlen(arr) == 0 || 0 == strcmp("\n", arr)) {
+        char* input = readline(prompt);
+
+        // 如果用户输入为空，则继续循环
+        if (input == NULL || strcmp(input, "") == 0) {
             continue;
         }
 
-        while (*argv != '\0')  // 字符串没有结束之前一直循环
-        {
-            if (*argv != ' ')  // 字符不是空格时
-            {
-                str[i] = argv; // 将字符写入str中
-                i++;
-                // 当前字符不是空格并且字符串未结束遍历下一字符
-                // 当字符为空格时，将该字符转换为结束符'\0'（字符命令结束）
-                // 开始下一个字符
-                while (*argv != '\0' && *argv != ' ') {
-                    argv++;
-                }
-                *argv = '\0';
-            }
-            argv++;
+        // 将用户输入添加到历史记录
+        // add_history(input);
+
+        // 分解用户输入的命令和参数
+        char* token;
+        char* args[LENGTH];
+        int argc = 0;
+        token = strtok(input, " ");
+        while (token != NULL && argc < LENGTH - 1) {
+            args[argc++] = token;
+            token = strtok(NULL, " ");
         }
-        // 将下一指针设置为空
-        str[i] = NULL;
-        if (strcmp("exit", str[0]) == 0) {
+        args[argc] = NULL;
+
+        // 检查是否是退出命令
+        if (strcmp(args[0], "exit") == 0) {
+            free(input);
             break;
         }
-        // 当出现cd的时候,这里是字符串的比较,strcmp函数,相同则为0
-        if (strcmp("cd", str[0]) == 0) {
-            if (str[1] == NULL || str[1] == 0) {
+
+        // 检查是否是改变目录命令
+        if (strcmp(args[0], "cd") == 0) {
+            if (argc == 1 || strcmp(args[1], "~") == 0) {
                 chdir(getenv("HOME"));
-                strcpy(last_dir, buf);
             }
-            else if (strcmp(str[1], "-") == 0) {
-                if (strlen(last_dir) == 0) {
-                    printf("%s\n", buf);
-                }
-                else {
-                    if (chdir(last_dir) == -1) {
-                        perror("chdir");
-                    }
-                    else {
-                        printf("%s\n", last_dir);
-                    }
-                    strcpy(last_dir, buf);
-                }
+            else if (strcmp(args[1], "-") == 0) {
+                chdir(last_dir);
             }
             else {
-                // char cwd[1024];
-                // if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                //     printf("当前工作目录：%s\n", cwd);
-                // }
-                if (chdir(str[1]) == -1) {
-                    perror("chdir");
-                }
-                strcpy(last_dir, buf);
+                chdir(args[1]);
             }
+            strcpy(last_dir, cwd);
+            free(input);
             continue;
         }
-        // 创建子程序//
+
+        // 检查重定向符号并进行重定向
+        int redirect_out = 0; // 标记是否有输出重定向
+        int redirect_out_app = 0;
+        int redirect_out_over = 0;
+        int redirect_in = 0; // 标记是否有输入重定向
+        char* output_file = NULL;
+        char* input_file = NULL;
+
+        for (int i = 0; i < argc; i++) {
+            if (strcmp(args[i], ">") == 0) {
+                if (i + 1 < argc) {
+                    redirect_out = 1;
+                    redirect_out_over = 1;
+                    output_file = args[i + 1];
+                    args[i] = NULL;
+                    args[i + 1] = NULL;
+                    break;
+                }
+            }
+            else if (strcmp(args[i], ">>") == 0) {
+                if (i + 1 < argc) {
+                    redirect_out = 1; // 追加重定向
+                    redirect_out_app = 1;
+                    output_file = args[i + 1];
+                    args[i] = NULL;
+                    args[i + 1] = NULL;
+                    break;
+                }
+            }
+            else if (strcmp(args[i], "<") == 0) {
+                if (i + 1 < argc) {
+                    redirect_in = 1;
+                    input_file = args[i + 1];
+                    args[i] = NULL;
+                    args[i + 1] = NULL;
+                    break;
+                }
+            }
+        }
+
+        // 创建子进程执行命令
         pid_t pid = fork();
-        // 创建失败
         if (pid < 0) {
-            perror("error");
-            return -1;
+            perror("fork");
+            free(input);
+            exit(EXIT_FAILURE);
         }
-        else if (0 == pid) {
-            // 使用cxecvp进行替换，转到需要执行的程序中
-            execvp(str[0], str);
-            perror("error");
-            exit(-1);
+        else if (pid == 0) {
+            // 子进程执行命令
+            if (redirect_out) {
+                int fd;
+                if (redirect_out_over) { // 覆盖重定向
+                    fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                }
+                else if (redirect_out_app) { // 追加重定向
+                    fd = open(output_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                }
+                if (fd < 0) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+            if (redirect_in) {
+                int fd = open(input_file, O_RDONLY);
+                if (fd < 0) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            execvp(args[0], args);
+            perror("execvp");
+            free(input);
+            exit(EXIT_FAILURE);
         }
-        else if (strcmp(str[i - 1], "&") != 0) {
+        else {
+            // 等待子进程执行完成
             wait(NULL);
         }
+
+        free(input);
     }
+
     return 0;
 }
